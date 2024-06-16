@@ -8,16 +8,15 @@ import pandas as pd
 import os
 import sys
 import multiprocessing
-from moduledata import EmdData
 from attnset import ProbabilityAttention, FullAttention
 from pretreatment import PositionalEmbedding, ExpandEmbedding
 from module import Distilling, CrossLayer
+from moduledata import AceUnitData
 
 
-
-class AllData:
-    def __init__(self, source_data: pd.DataFrame, verify_size: int, test_size: int, unit_size: int, predict_size: int, emd_col: list, result_col: list, back_num: int, data_type, emd_type: int = 3):
-        super(AllData, self).__init__()
+class AllAceData:
+    def __init__(self, source_data: pd.DataFrame, verify_size: int, test_size: int, unit_size: int, predict_size: int, emd_col: list, result_col: list, back_num: int):
+        super(AllAceData, self).__init__()
         dataframe = source_data
         self.true_train_set,self.true_verify_set,self.true_test_set = [], [], []
         self.former_train_set,self.former_verify_set,self.former_test_set = [], [], []
@@ -25,25 +24,25 @@ class AllData:
         split_index = - back_num * test_size - verify_size - 1
         train_tmp = dataframe.iloc[:split_index].reset_index(drop=True)
         self.true_train_set.append(train_tmp)
-        self.former_train_set.append(data_type(train_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col, emd_type=emd_type))
+        self.former_train_set.append(AceUnitData(train_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col))
 
         for _ in range(back_num):
             # train data
             train_tmp = dataframe.iloc[split_index-unit_size+predict_size: split_index+test_size if split_index<-test_size else -1].reset_index(drop=True)
             self.true_train_set.append(train_tmp)
-            self.former_train_set.append(data_type(train_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col, emd_type=emd_type))
+            self.former_train_set.append(AceUnitData(train_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col))
 
             # verify data
             split_index += verify_size
             verify_tmp = dataframe.iloc[split_index-verify_size-unit_size+predict_size: split_index].reset_index(drop=True)
             self.true_verify_set.append(verify_tmp)
-            self.former_verify_set.append(data_type(verify_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col, emd_type=emd_type))
+            self.former_verify_set.append(AceUnitData(verify_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col))
 
             # test data
             split_index += test_size
             test_tmp = dataframe.iloc[split_index-test_size-unit_size+predict_size: split_index].reset_index(drop=True)
             self.true_test_set.append(test_tmp)
-            self.former_test_set.append(data_type(test_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col, emd_type=emd_type))
+            self.former_test_set.append(AceUnitData(test_tmp, unit_size, predict_size, emd_col=emd_col, result_col=result_col))
             
             # index
             split_index -= verify_size
@@ -70,7 +69,7 @@ class ACEFormer(nn.Module):
 
         # distillation module
         ## temporal perception mechanism
-        self.temporal = nn.ModuleList()
+        self.temporal = nn.ParameterList()
         ## distillation mechanism
         self.dis_attn = nn.ModuleList()
         self.distill = nn.ModuleList()
@@ -85,7 +84,7 @@ class ACEFormer(nn.Module):
                 )
             )
             self.distill.append(Distilling(embed_tmp))
-            self.hidden_local.append(nn.Linear(unit_size, embed_tmp // 2))
+            self.temporal.append(nn.Parameter(torch.rand(unit_size, embed_tmp // 2)))
 
         # attention module
         self.attn = nn.ModuleList(
@@ -110,8 +109,7 @@ class ACEFormer(nn.Module):
         for i in range(self.dis_layer):
             attn_res = self.dis_attn[i](dis_output, dis_output)
             dis_res = self.distill[i](attn_res)
-            hid_res = self.temporal[i](dis_output)
-            dis_output = dis_res + hid_res
+            dis_output = dis_res + self.temporal[i]
         
         # attention dealt
         attn_output = dis_output
@@ -157,7 +155,7 @@ def train(model, train_data: Data.Dataset, batch_size: int, device: str = "cpu",
 
     return model
 
-def test(model, test_data: EmdData, predict_size: int, device: str):
+def test(model, test_data, predict_size: int, device: str):
     model.eval()
     true, predict = [], []
     with torch.no_grad():
@@ -166,7 +164,7 @@ def test(model, test_data: EmdData, predict_size: int, device: str):
             stamp = torch.tensor(stamp).unsqueeze(0).int().to(device)
 
             true.append(true_data[-predict_size])
-            outputs, _, _ = model(data, stamp)
+            outputs = model(data)
             predict.append(outputs.reshape(-1)[-predict_size:].tolist())
 
     true, predict = test_data.anti_normalize_data(np.array(true), np.array(predict))
@@ -181,7 +179,7 @@ def run_model(source_data: pd.DataFrame, index: int, device: str, backtest_num: 
 
     start_time = time.time()
     # product dataset for model
-    data_set = AllData(source_data=source_data, verify_size=50, test_size=100, unit_size=30, predict_size=5, emd_col=emd_col, result_col=result_col, back_num=backtest_num, data_type=EmdData)
+    data_set = AllAceData(source_data=source_data, verify_size=50, test_size=100, unit_size=30, predict_size=5, emd_col=emd_col, result_col=result_col, back_num=backtest_num)
     former_train_set, former_verify_set, former_test_set = data_set.get_data()
     true_train_set, true_verify_set, true_test_set = data_set.get_not_normaliza_data()
 
@@ -196,15 +194,15 @@ def run_model(source_data: pd.DataFrame, index: int, device: str, backtest_num: 
         # training model with train set
         model = train(model, former_train_set[i], batch_size, device, iteration)
         # training
-        true, predict = test(model, former_train_set[i], predict_size=5, device=dev)
+        true, predict = test(model, former_train_set[i], predict_size=5, device=device)
         train_true_set.append(true)
         train_predict_set.append(predict)
         # verify
-        true, predict = test(model, former_verify_set[i], predict_size=5, device=dev)
+        true, predict = test(model, former_verify_set[i], predict_size=5, device=device)
         verify_true_set.append(true)
         verify_predict_set.append(predict)
         # test
-        true, predict = test(model, former_test_set[i], predict_size=5, device=dev)
+        true, predict = test(model, former_test_set[i], predict_size=5, device=device)
         test_true_set.append(true)
         test_predict_set.append(predict)
 

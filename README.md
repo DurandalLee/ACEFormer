@@ -5,12 +5,10 @@
 [![ACEFormer](https://img.shields.io/badge/ACEFormer-brightgreen.svg?style=plastic)](https://github.com/DurandalLee/ACEFormer)
 
 This is the origin Pytorch implementation of ACEFormer in the following paper:
-An End-To-End Structure with Improved EMD and Temporal Perception Mechanism for Stock Forecasting
+[An End-to-End Structure with Novel Position Mechanism and Improved EMD for Stock Forecasting](https://arxiv.org/abs/2404.07969)
 
 ## Table of Contents
-
 - [ACEFormer](#aceformer)
-	- [Table of Contents](#table-of-contents)
 	- [Requirements](#requirements)
 	- [Data](#data)
 	- [Usage](#usage)
@@ -26,7 +24,7 @@ An End-To-End Structure with Improved EMD and Temporal Perception Mechanism for 
 
 ## Data
 
-The stock dataset used in the paper can be downloaded in the repo [Stock Data](https://github.com/DurandalLee/ACEFormer/tree/main/data).
+The stock dataset used in the paper can be downloaded in the repo [Stock Data](https://github.com/DurandalLee/ACEFormer/tree/main/stockdata).
 
 Two real-world datasets, which are NASDAQ100 and SPY500, from US stock markets spanning over ten years.
 The NASDAQ100 is a stock market index made up of 102 equity stocks of non-financial companies from the NASDAQ.
@@ -34,13 +32,11 @@ The SPY500 is Standard and Poor's 500, which is a stock market index tracking th
 The [historical data](https://www.investing.com/) ranging from Jan-03-2012 to Jan-28-2022 for our experiments.
 
 ## Usage
-
-Commands for training and testing the model with *ACEFormer* on Dataset NDX100.csv and SPY500.csv respectively:
+The training script for *ACEFormer* is the [ACEFormer.py](https://github.com/DurandalLee/ACEFormer/tree/main/ACEFormer.py). A sample command to execute the script is as follows:
 
 ```bash
 # NDX100 
-python ACEFormer.py cuda:0 5 ./result ./data/NDX100.csv 1 2000
-
-# SPY500.csv
-python ACEFormer.py cuda:0 5 ./result ./data/SPY100.csv 1 2000
+python cpu 5 ./result ./stockdata/NDX100.csv 1 2000
 ```
+
+Additionally, you can refer to the example in the [example.ipynb](https://github.com/DurandalLee/ACEFormer/tree/main/example.ipynb) to understand the model training process.

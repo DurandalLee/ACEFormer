@@ -4,10 +4,12 @@ import math
 import torch
 import torch.nn as nn
 
+
 class ExpandEmbedding(nn.Module, ABC):
     def __init__(self, in_dim, out_dim):
         super(ExpandEmbedding, self).__init__()
-        self.ExpandConv = nn.Conv1d(in_channels=in_dim, out_channels=out_dim, kernel_size=3, padding=1, padding_mode='circular')
+        self.ExpandConv = nn.Conv1d(in_channels=in_dim, out_channels=out_dim,
+                                    kernel_size=3, padding=1, padding_mode='circular')
 
     def forward(self, x: torch.tensor):
         x = self.ExpandConv(x.transpose(1, 2)).transpose(1, 2)
@@ -48,3 +50,20 @@ class StampEmbedding(nn.Module, ABC):
         day_x = self.day_embedding(day)
 
         return day_x + week_x + month_x
+
+
+class DataEmbedding(nn.Module, ABC):
+    def __init__(self, in_dim: int, out_dim: int, drop: float = 0.1):
+        super(DataEmbedding, self).__init__()
+
+        self.expand_emb = ExpandEmbedding(in_dim, out_dim)
+        self.position_emb = PositionalEmbedding(out_dim)
+        self.stamp_emb = StampEmbedding(out_dim)
+        self.dropout = nn.Dropout(p=drop)
+
+    def forward(self, x: torch.tensor, time: torch.tensor):
+        x = self.expand_emb(x) + self.position_emb(x)
+        stamp = self.stamp_emb(time[:, :, 0], time[:, :, 1], time[:, :, 2])
+        emb = self.dropout(x + stamp)
+
+        return emb
